@@ -1,23 +1,35 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 import { auth, googleProvider } from "../firebase.ts";
 import { signInWithPopup, sendSignInLinkToEmail } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
+
+const API_BASE = "http://localhost:3333/api";
 
 const SignupPage = () => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const cleanupUninvited = async (email: string) => {
+    try {
+      await axios.post(`${API_BASE}/cleanup-uninvited`, { email });
+      console.log(`✅ Cleanup triggered for ${email}`);
+    } catch (err) {
+      console.warn("⚠️ Cleanup failed:", err);
+    }
+  };
 
   const handleEmailSignup = async () => {
     setLoading(true);
     try {
       // Step 1: Verify invite
-      await axios.post("http://localhost:3333/verify-invite", { email });
+      await axios.post(`${API_BASE}/verify-invite`, { input: email });
 
       // Step 2: Mark invite used
-      const markRes = await axios.post(
-        "http://localhost:3333/mark-invite-used",
-        { email }
-      );
+      const markRes = await axios.post(`${API_BASE}/mark-invite-used`, {
+        email,
+      });
       if (
         markRes.data?.success === false &&
         markRes.data?.message === "Invite already used"
@@ -27,7 +39,7 @@ const SignupPage = () => {
       }
 
       // Step 3: Store in valid_users
-      await axios.post("http://localhost:3333/store-valid-user", { email });
+      await axios.post(`${API_BASE}/store-valid-user`, { email });
 
       // Step 4: Send Firebase magic link
       const actionCodeSettings = {
@@ -41,9 +53,13 @@ const SignupPage = () => {
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.error || err.response?.data?.message;
-      if (msg === "Invite not found") alert("Email is not invited.");
-      else if (msg === "Invite already used") alert("Invite already used.");
-      else alert("Something went wrong.");
+
+      if (msg?.includes("not invited") || msg?.includes("Invite not found")) {
+        alert("Email is not invited.");
+        await cleanupUninvited(email);
+      } else {
+        alert("Something went wrong.");
+      }
     } finally {
       setLoading(false);
     }
@@ -55,14 +71,13 @@ const SignupPage = () => {
       const result = await signInWithPopup(auth, googleProvider);
       const userEmail = result.user.email;
 
-      await axios.post("http://localhost:3333/verify-invite", {
+      // Step 1: Verify invite
+      await axios.post(`${API_BASE}/verify-invite`, { input: userEmail });
+
+      // Step 2: Mark invite used
+      const markRes = await axios.post(`${API_BASE}/mark-invite-used`, {
         email: userEmail,
       });
-
-      const markRes = await axios.post(
-        "http://localhost:3333/mark-invite-used",
-        { email: userEmail }
-      );
       if (
         markRes.data?.success === false &&
         markRes.data?.message === "Invite already used"
@@ -71,17 +86,28 @@ const SignupPage = () => {
         return;
       }
 
-      await axios.post("http://localhost:3333/store-valid-user", {
+      // Step 3: Store in valid_users
+      await axios.post(`${API_BASE}/store-valid-user`, {
         email: userEmail,
       });
 
       alert("Successfully signed in with Google!");
+      setTimeout(() => navigate("/dashboard"), 2000);
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.error || err.response?.data?.message;
-      if (msg === "Invite not found") alert("Email is not invited.");
-      else if (msg === "Invite already used") alert("Invite already used.");
-      else alert("Google Sign-in failed.");
+
+      if (msg?.includes("not invited") || msg?.includes("Invite not found")) {
+        alert("Email is not invited.");
+        if (err?.config?.data) {
+          const data = JSON.parse(err.config.data);
+          if (data?.email || data?.input) {
+            await cleanupUninvited(data.email || data.input);
+          }
+        }
+      } else {
+        alert("Google Sign-in failed.");
+      }
     } finally {
       setLoading(false);
     }

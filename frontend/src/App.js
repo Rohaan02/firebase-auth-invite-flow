@@ -1,14 +1,17 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Signup from "./pages/Signup.tsx";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import SignupPage from "./pages/Signup.tsx";
+import EmailVerify from "./pages/EmailVerify.tsx";
+import Dashboard from "./pages/Dashboard.tsx";
 
 function App() {
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/" element={<SignupPage />} />
+        <Route path="/email-verify" element={<EmailVerify />} />
+        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 }
 
